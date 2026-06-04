@@ -17,3 +17,12 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Added by Antigravity CLI
+.env
+.env.*
+.env.local
+.venv/
+downloader.db
+emails.db
+env/

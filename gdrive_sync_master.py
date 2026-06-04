@@ -40,7 +40,9 @@ BACKUP_TARGETS = [
     (r"D:\02 ChatGPT", "gdrive:02 ChatGPT", "chatgpt.log"),
     (r"D:\07 obsidian", "gdrive:04 obsidian", "obsidian.log"),
     (r"D:\01 CA Final Master\03 AUDIT", "gdrive:04 Audit", "audit.log"),
-    (r"D:\01 CA Final Master\01 FR", "gdrive:04 FR", "fr.log")
+    (r"D:\01 CA Final Master\01 FR", "gdrive:04 FR", "fr.log"),
+    (r"D:\02 ChatGPT\07 Books", "gdrive:07 Books", "books.log")
+    
 ]
 
 def execute_sync(source: str, destination: str, log_filename: str):
