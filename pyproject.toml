@@ -1,0 +1,29 @@
+[project]
+name = "rclone-backup-system"
+version = "2.0.0"
+description = "Automated multi-target Google Drive backup system using rclone with live TUI, retries, and Telegram alerts"
+readme = "README.md"
+authors = [
+    { name = "Shubham Kadam" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.31.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+gbackup = "gdrive_sync_master:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]

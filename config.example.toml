@@ -1,0 +1,53 @@
+# Rclone Auto Backup System (v2) Configuration Template
+
+[settings]
+# Path to rclone binary (overridable via RCLONE_PATH environment variable)
+rclone_path = "rclone"
+
+# Directory where log files are stored
+log_dir = "D:\\PythonTools\\rclone\\logs"
+
+# Number of parallel workers
+max_workers = 3
+
+# Retry attempts on failure per target
+retry_attempts = 3
+
+# Delay (in seconds) before each retry attempt
+retry_backoff_seconds = [5, 20]
+
+# Log rotation settings for master_sync.log
+log_max_megabytes = 5
+log_backup_count = 5
+
+[rclone]
+# Default sync flags passed to rclone
+flags = [
+    "--exclude", "*.zip",
+    "--max-size", "15M",
+    "--transfers", "8",
+    "--checkers", "16",
+    "--drive-chunk-size", "64M",
+    "--fast-list",
+    "--log-level", "INFO",
+]
+
+[notifications]
+# Set to true to enable Telegram alerts
+enabled = true
+
+# Telegram Bot API Token (can also be provided via TELEGRAM_BOT_TOKEN env var)
+bot_token = "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+
+# Telegram Chat ID (can also be provided via TELEGRAM_CHAT_ID env var)
+chat_id = "123456789"
+
+[[targets]]
+source = "D:\\03 Permanent Personal Data"
+destination = "gdrive:03 Permanent Personal Data"
+log_name = "personal_data.log"
+
+[[targets]]
+source = "D:\\02 ChatGPT"
+destination = "gdrive:02 ChatGPT"
+log_name = "chatgpt.log"

@@ -5,6 +5,7 @@ __pycache__/
 *.pyd
 *.bat
 *.exe
+*.egg-info/
 
 # Logs
 logs/
@@ -12,6 +13,8 @@ logs/
 
 # Virtual env
 venv/
+.venv/
+.pytest_cache/
 
 
 # OS

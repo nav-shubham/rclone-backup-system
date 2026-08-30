@@ -1,0 +1,90 @@
+# Rclone Auto Backup System (v2) Configuration
+
+[settings]
+# Path to rclone binary (overridable via RCLONE_PATH environment variable)
+rclone_path = "rclone"
+
+# Directory where log files are stored
+log_dir = "D:\\PythonTools\\rclone\\logs"
+
+# Number of parallel workers
+max_workers = 3
+
+# Retry attempts on failure per target
+retry_attempts = 3
+
+# Delay (in seconds) before each retry attempt
+# Attempt 1 -> fails -> wait 5s -> Attempt 2 -> fails -> wait 20s -> Attempt 3
+retry_backoff_seconds = [5, 20]
+
+# Log rotation settings for master_sync.log
+log_max_megabytes = 5
+log_backup_count = 5
+
+[rclone]
+# Default sync flags passed to rclone
+flags = [
+    "--exclude", "*.zip",
+    "--max-size", "15M",
+    "--transfers", "8",
+    "--checkers", "16",
+    "--drive-chunk-size", "64M",
+    "--fast-list",
+    "--log-level", "INFO",
+]
+
+[notifications]
+# Set to true to enable Telegram alerts
+enabled = true
+
+# Telegram Bot API Token (can also be provided via TELEGRAM_BOT_TOKEN env var)
+bot_token = ""
+
+# Telegram Chat ID (can also be provided via TELEGRAM_CHAT_ID env var)
+chat_id = ""
+
+# ==============================================================================
+# Backup Targets Configuration
+# ------------------------------------------------------------------------------
+# REVIEW NOTE:
+# `D:\02 ChatGPT` and `D:\02 ChatGPT\07 Books` are currently both listed as
+# separate targets below. As a result, the `07 Books` folder gets synced twice:
+#   1. Nested inside the `02 ChatGPT` sync to `gdrive:02 ChatGPT/07 Books`
+#   2. Independently to the root `gdrive:07 Books`
+#
+# Please review whether you would like to:
+#   Option A: Exclude `07 Books` from the ChatGPT target (e.g. adding an exclude
+#             rule for `/07 Books/**` to that specific target), OR
+#   Option B: Keep the duplication intentionally to maintain an independent
+#             top-level `07 Books` folder on Google Drive.
+# ==============================================================================
+
+[[targets]]
+source = "D:\\03 Permanent Personal Data"
+destination = "gdrive:03 Permanent Personal Data"
+log_name = "personal_data.log"
+
+[[targets]]
+source = "D:\\02 ChatGPT"
+destination = "gdrive:02 ChatGPT"
+log_name = "chatgpt.log"
+
+[[targets]]
+source = "D:\\07 obsidian"
+destination = "gdrive:04 obsidian"
+log_name = "obsidian.log"
+
+[[targets]]
+source = "D:\\01 CA Final Master\\03 AUDIT"
+destination = "gdrive:04 Audit"
+log_name = "audit.log"
+
+[[targets]]
+source = "D:\\01 CA Final Master\\01 FR"
+destination = "gdrive:04 FR"
+log_name = "fr.log"
+
+[[targets]]
+source = "D:\\02 ChatGPT\\07 Books"
+destination = "gdrive:07 Books"
+log_name = "books.log"
