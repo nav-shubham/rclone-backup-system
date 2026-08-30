@@ -69,6 +69,7 @@ def test_sync_retries_and_exponential_backoff(mock_popen: MagicMock, tmp_path: P
             log_dir=str(tmp_path / "logs"),
             retry_attempts=3,
             retry_backoff_seconds=[0.01, 0.02],
+            show_file_queue=False,
         ),
         notifications=NotificationConfig(enabled=False),
     )
@@ -102,6 +103,7 @@ def test_sync_final_failure_after_exhausting_retries(mock_popen: MagicMock, tmp_
             log_dir=str(tmp_path / "logs"),
             retry_attempts=2,
             retry_backoff_seconds=[0.01],
+            show_file_queue=False,
         ),
         notifications=NotificationConfig(enabled=False),
     )

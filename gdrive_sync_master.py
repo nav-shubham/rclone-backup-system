@@ -72,6 +72,7 @@ class SettingsConfig:
     retry_backoff_seconds: list[int] = field(default_factory=lambda: [5, 20])
     log_max_megabytes: int = 5
     log_backup_count: int = 5
+    show_file_queue: bool = True
 
 
 @dataclass
@@ -127,11 +128,30 @@ class TargetState:
     eta: str = "-"
     current_file: str = ""
     file_percent: float = 0.0
+    queue: list[str] = field(default_factory=list)
+    uploaded: list[str] = field(default_factory=list)
     error_message: str = ""
     start_time: float | None = None
     end_time: float | None = None
     retry_wait_until: float | None = None
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def set_initial_queue(self, initial_queue: list[str]) -> None:
+        """Seed the target queue with dry-run discovered files."""
+        with self._lock:
+            self.queue = list(initial_queue)
+            self.uploaded = []
+
+    def on_file_completed(self, file_name: str) -> None:
+        """Handle per-file completion event: move from queue to uploaded."""
+        with self._lock:
+            if file_name in self.queue:
+                self.queue.remove(file_name)
+            if file_name not in self.uploaded:
+                self.uploaded.append(file_name)
+            if self.current_file == file_name:
+                self.current_file = ""
+                self.file_percent = 0.0
 
     def update(self, **kwargs: Any) -> None:
         with self._lock:
@@ -152,6 +172,8 @@ class TargetState:
                 "eta": self.eta,
                 "current_file": self.current_file,
                 "file_percent": self.file_percent,
+                "queue": list(self.queue),
+                "uploaded": list(self.uploaded),
                 "error_message": self.error_message,
                 "start_time": self.start_time,
                 "end_time": self.end_time,
@@ -198,6 +220,7 @@ def load_config(config_path: Path | str | None = None) -> AppConfig:
         retry_backoff_seconds = [5, 20]
     log_max_mb = int(raw_settings.get("log_max_megabytes", 5))
     log_backup_count = int(raw_settings.get("log_backup_count", 5))
+    show_file_queue = bool(raw_settings.get("show_file_queue", True))
 
     settings = SettingsConfig(
         rclone_path=rclone_path,
@@ -207,6 +230,7 @@ def load_config(config_path: Path | str | None = None) -> AppConfig:
         retry_backoff_seconds=retry_backoff_seconds,
         log_max_megabytes=log_max_mb,
         log_backup_count=log_backup_count,
+        show_file_queue=show_file_queue,
     )
 
     # Rclone flags
@@ -495,6 +519,44 @@ def parse_rclone_json_line(line: str) -> dict[str, Any] | None:
     }
 
 
+def fetch_target_queue(target: TargetConfig, config: AppConfig) -> list[str]:
+    """Pre-scan target with dry-run to discover the ordered list of files to transfer."""
+    rclone_exe = config.settings.rclone_path
+    cmd = [
+        rclone_exe,
+        "sync",
+        target.source,
+        target.destination,
+    ] + config.rclone.flags + ["--dry-run", "--use-json-log"]
+
+    flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    try:
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            creationflags=flags,
+        )
+        queue: list[str] = []
+        for line in res.stdout.splitlines():
+            line = line.strip()
+            if not line or not line.startswith("{"):
+                continue
+            try:
+                data = json.loads(line)
+                if (data.get("skipped") == "copy" or data.get("msg", "").startswith("Skipped copy")) and data.get("object"):
+                    queue.append(data["object"])
+            except Exception:
+                continue
+        return queue
+    except Exception as e:
+        logging.warning(f"[{target.name}] Failed to pre-calculate queue via dry-run: {e}")
+        return []
+
+
 def execute_sync(
     target: TargetConfig,
     state: TargetState,
@@ -537,6 +599,13 @@ def execute_sync(
             error=err,
             duration_seconds=time.time() - start_wall_time,
         )
+
+    # Priority 6: Pre-calculate file queue via dry-run pass if enabled
+    if config.settings.show_file_queue:
+        initial_queue = fetch_target_queue(target, config)
+        state.set_initial_queue(initial_queue)
+        if not interactive_tui and initial_queue:
+            logging.info(f"[{target.name}] Pre-scan found {len(initial_queue)} file(s) in queue")
 
     last_error = ""
 
@@ -586,6 +655,21 @@ def execute_sync(
                         log_file.write(line)
                         log_file.flush()
 
+                        # Check for per-file completion events
+                        line_str = line.strip()
+                        if line_str.startswith("{"):
+                            try:
+                                json_data = json.loads(line_str)
+                                if json_data.get("object"):
+                                    msg = json_data.get("msg", "")
+                                    if msg.startswith("Copied") or "Copied" in msg:
+                                        file_obj = json_data["object"]
+                                        state.on_file_completed(file_obj)
+                                        if not interactive_tui:
+                                            logging.info(f"[{target.name}] Uploaded: {file_obj}")
+                            except Exception:
+                                pass
+
                         # Parse JSON stats metrics
                         parsed_stats = parse_rclone_json_line(line)
                         if parsed_stats:
@@ -599,14 +683,16 @@ def execute_sync(
                             )
                             # Non-interactive (no-tty) log fallback
                             if not interactive_tui:
+                                snap = state.snapshot()
                                 file_info = (
                                     f" | File: {parsed_stats['current_file']} ({parsed_stats['file_percent']:.0f}%)"
                                     if parsed_stats["current_file"]
                                     else ""
                                 )
+                                q_info = f" | Uploaded: {len(snap['uploaded'])}, Queued: {len(snap['queue'])}"
                                 logging.info(
                                     f"[{target.name}] {parsed_stats['transferred']} ({parsed_stats['percentage']}) "
-                                    f"| {parsed_stats['speed']} | ETA: {parsed_stats['eta']}{file_info}"
+                                    f"| {parsed_stats['speed']} | ETA: {parsed_stats['eta']}{file_info}{q_info}"
                                 )
 
                 return_code = proc.wait()
@@ -709,6 +795,7 @@ def generate_dashboard(
     table.add_column("Destination", style="dim", no_wrap=True, ratio=3)
     table.add_column("Status", justify="center", no_wrap=True, ratio=2)
     table.add_column("Active File", style="cyan", no_wrap=False, ratio=3)
+    table.add_column("Queue / Uploaded", style="white", no_wrap=False, ratio=3)
     table.add_column("Transferred", justify="right", ratio=2)
     table.add_column("Speed / ETA", justify="right", ratio=2)
     table.add_column("Time", justify="right", ratio=1)
@@ -742,6 +829,23 @@ def generate_dashboard(
             status_render = Text(str(st), style="white")
             file_render = Text("-", style="dim")
 
+        # Queue / Uploaded summary
+        uploaded_count = len(snap["uploaded"])
+        queued_count = len(snap["queue"])
+
+        last_uploaded_preview = f" ([dim]{Path(snap['uploaded'][-1]).name}[/])" if snap["uploaded"] else ""
+        next_queued_preview = f" ([dim]{Path(snap['queue'][0]).name}[/])" if snap["queue"] else ""
+
+        if st == TargetStatus.SUCCESS:
+            queue_render = Text.from_markup(f"[green]✓ Uploaded: {uploaded_count}[/]{last_uploaded_preview}")
+        elif queued_count > 0 or uploaded_count > 0:
+            queue_render = Text.from_markup(
+                f"[green]Done: {uploaded_count}[/]{last_uploaded_preview}  "
+                f"[yellow]Queue: {queued_count}[/]{next_queued_preview}"
+            )
+        else:
+            queue_render = Text("-", style="dim")
+
         # Transferred string
         trans = snap["transferred"]
         if snap["percentage"] and snap["percentage"] != "-":
@@ -767,6 +871,7 @@ def generate_dashboard(
             t.destination,
             status_render,
             file_render,
+            queue_render,
             trans,
             speed_eta,
             time_str,

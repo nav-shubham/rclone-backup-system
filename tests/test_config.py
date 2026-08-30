@@ -34,6 +34,7 @@ def test_load_config_with_values(tmp_path: Path):
     max_workers = 5
     retry_attempts = 4
     retry_backoff_seconds = [2, 10, 30]
+    show_file_queue = false
 
     [rclone]
     flags = ["--fast-list", "--drive-chunk-size", "128M"]
@@ -61,6 +62,7 @@ def test_load_config_with_values(tmp_path: Path):
     assert cfg.settings.max_workers == 5
     assert cfg.settings.retry_attempts == 4
     assert cfg.settings.retry_backoff_seconds == [2, 10, 30]
+    assert cfg.settings.show_file_queue is False
     assert cfg.rclone.flags == ["--fast-list", "--drive-chunk-size", "128M"]
     assert cfg.notifications.enabled is True
     assert cfg.notifications.bot_token == "test_bot_token"

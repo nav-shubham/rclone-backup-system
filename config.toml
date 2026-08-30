@@ -21,6 +21,9 @@ retry_backoff_seconds = [5, 20]
 log_max_megabytes = 5
 log_backup_count = 5
 
+# Pre-calculate file transfer queue via dry-run pass before syncing
+show_file_queue = true
+
 [rclone]
 # Default sync flags passed to rclone
 flags = [

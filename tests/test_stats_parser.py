@@ -86,3 +86,52 @@ def test_parse_rclone_json_non_stats_event():
 def test_parse_rclone_non_json_line():
     assert parse_rclone_json_line("Not a JSON line") is None
     assert parse_rclone_json_line("") is None
+
+
+def test_target_state_queue_and_uploaded_lifecycle():
+    from gdrive_sync_master import TargetConfig, TargetState
+
+    target = TargetConfig(source="D:/Source", destination="gdrive:Dest", log_name="test.log")
+    state = TargetState(target=target)
+
+    # Initial queue
+    state.set_initial_queue(["file1.pdf", "file2.pdf", "file3.pdf"])
+    snap = state.snapshot()
+    assert snap["queue"] == ["file1.pdf", "file2.pdf", "file3.pdf"]
+    assert snap["uploaded"] == []
+
+    # File 1 starts transferring and completes
+    state.update(current_file="file1.pdf", file_percent=50.0)
+    state.on_file_completed("file1.pdf")
+    snap = state.snapshot()
+    assert snap["queue"] == ["file2.pdf", "file3.pdf"]
+    assert snap["uploaded"] == ["file1.pdf"]
+    assert snap["current_file"] == ""
+    assert snap["file_percent"] == 0.0
+
+    # File 2 completes
+    state.on_file_completed("file2.pdf")
+    snap = state.snapshot()
+    assert snap["queue"] == ["file3.pdf"]
+    assert snap["uploaded"] == ["file1.pdf", "file2.pdf"]
+
+
+def test_fetch_target_queue_parsing():
+    from unittest.mock import patch, MagicMock
+    from gdrive_sync_master import TargetConfig, AppConfig, SettingsConfig, fetch_target_queue
+
+    sample_output = "\n".join([
+        json.dumps({"level": "notice", "msg": "Skipped copy as --dry-run is set", "skipped": "copy", "object": "doc1.pdf"}),
+        json.dumps({"level": "notice", "msg": "Skipped copy as --dry-run is set", "skipped": "copy", "object": "doc2.pdf"}),
+        json.dumps({"level": "notice", "msg": "Skipped set directory modification time", "skipped": "set directory modification time", "object": "dir"}),
+    ])
+
+    mock_res = MagicMock()
+    mock_res.stdout = sample_output
+
+    with patch("subprocess.run", return_value=mock_res):
+        target = TargetConfig(source="D:/Source", destination="gdrive:Dest", log_name="test.log")
+        cfg = AppConfig(settings=SettingsConfig())
+        queue = fetch_target_queue(target, cfg)
+        assert queue == ["doc1.pdf", "doc2.pdf"]
+
