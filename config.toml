@@ -41,10 +41,10 @@ flags = [
 enabled = true
 
 # Telegram Bot API Token (can also be provided via TELEGRAM_BOT_TOKEN env var)
-bot_token = ""
+bot_token = "8729490850:AAFKLvzE7DTTp67dbf8ejsVKYP4SIDIyKkE"
 
 # Telegram Chat ID (can also be provided via TELEGRAM_CHAT_ID env var)
-chat_id = ""
+chat_id = "752824992"
 
 # ==============================================================================
 # Backup Targets Configuration
